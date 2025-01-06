@@ -11,7 +11,7 @@ class CompanyAdmin(admin.ModelAdmin):
 
 @admin.register(ServiceCategory)
 class ServiceCategoryAdmin(admin.ModelAdmin):
-    list_display = ('name',)
+    list_display = ('name', 'user')
     search_fields = ('name',)
 
 

@@ -18,22 +18,39 @@ class Company(models.Model):
 
 
 class ServiceCategory(models.Model):
-    name = models.CharField(max_length=50, unique=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    name = models.CharField(max_length=50)
 
     def __str__(self):
         return self.name
-
-
-class Service(models.Model):
-    name = models.CharField(max_length=150, unique=True)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    service_category = models.ForeignKey(ServiceCategory, on_delete=models.CASCADE, related_name='services', null=True, blank=True)
 
     class Meta:
         ordering = ['name']
 
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'name'], name='unique_category_within_user')
+        ]
+
+
+class Service(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
+    service_category = models.ForeignKey(ServiceCategory, on_delete=models.CASCADE, related_name='services', null=True, blank=True)
+    name = models.CharField(max_length=150)
+    slug = models.SlugField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ['name']
+
+    constraints = [
+        models.UniqueConstraint(fields=['service_category', 'name'], name='unique_service_within_category')
+    ]
+
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        self.slug = slugify(self.name)
+        super(Service, self).save(*args, **kwargs)
 
 
 class Employee(models.Model):
@@ -46,6 +63,11 @@ class Employee(models.Model):
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        # Capitalize the first letter of each word in the name
+        self.name = self.name.title()
+        super().save(*args, **kwargs)
 
 
 class Client(models.Model):

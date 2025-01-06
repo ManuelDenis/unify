@@ -18,11 +18,14 @@ from django.contrib import admin
 from django.urls import path, include
 from dj_rest_auth.views import PasswordResetView, PasswordResetConfirmView
 from rest_framework.routers import DefaultRouter
-
-from services.views import CompanyViewSet
+from services.views import CompanyViewSet, ServiceCategoryViewSet, ServiceViewSet, EmployeeViewSet
 
 router = DefaultRouter()
 router.register('company', CompanyViewSet, basename='company')
+router.register('service_category', ServiceCategoryViewSet, basename='service_category')
+router.register('services', ServiceViewSet, basename='services')
+router.register('employees', EmployeeViewSet, basename='employees')
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),

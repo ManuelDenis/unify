@@ -10,39 +10,65 @@ class CompanySerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'name', 'slug']
 
 
-class ServiceCategorySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ServiceCategory
-        fields = ['id', 'name']
-
-
 class ServiceSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField()
-    service_category = ServiceCategorySerializer(read_only=True)
-    service_category_id = serializers.PrimaryKeyRelatedField(
-        queryset=ServiceCategory.objects.all(),
-        source='service_category',
-        write_only=True
+    service_category = serializers.PrimaryKeyRelatedField(
+        queryset=ServiceCategory.objects.all()
     )
 
     class Meta:
         model = Service
-        fields = ['id', 'name', 'user', 'service_category', 'service_category_id']
+        fields = ['id', 'name', 'user', 'service_category']
+
+
+class ServiceCategorySerializer(serializers.ModelSerializer):
+    user = serializers.StringRelatedField()
+    services = serializers.SerializerMethodField()
+    employees = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ServiceCategory
+        fields = ['id', 'user', 'name', 'services', 'employees']
+
+    def get_services(self, obj):
+        """
+        Returnează doar serviciile asociate categoriei care aparțin utilizatorului autentificat.
+        """
+        request = self.context.get('request')
+        if request and hasattr(request, 'user'):
+            return ServiceSerializer(
+                obj.services.filter(user=request.user),  # Filtrare pe utilizatorul autentificat
+                many=True
+            ).data
+        return []
+
+    def get_employees(self, obj):
+        """
+        Returnează doar angajații asociați categoriei care aparțin utilizatorului autentificat.
+        """
+        request = self.context.get('request')
+        if request and hasattr(request, 'user'):
+            # Filtrare pe angajați în funcție de utilizatorul autentificat
+            employees = obj.employees.filter(user=request.user)
+            return EmployeeSerializer(employees, many=True).data
+        return []
 
 
 class EmployeeSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField()
-    service_categories = ServiceCategorySerializer(many=True, read_only=True)
-    service_category_ids = serializers.PrimaryKeyRelatedField(
+    service_categories = serializers.PrimaryKeyRelatedField(
         queryset=ServiceCategory.objects.all(),
-        many=True,
-        source='service_categories',
-        write_only=True
+        many=True
     )
+    service_category_names = serializers.SerializerMethodField()
 
     class Meta:
         model = Employee
-        fields = ['id', 'user', 'name', 'service_categories', 'service_category_ids']
+        fields = ['id', 'user', 'name', 'service_categories', 'service_category_names']
+
+    def get_service_category_names(self, obj):
+        # Returnăm lista de nume ale categoriilor
+        return [category.name for category in obj.service_categories.all()]
 
 
 class ClientSerializer(serializers.ModelSerializer):
