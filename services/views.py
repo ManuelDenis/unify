@@ -1,6 +1,7 @@
-from .models import Company, Service, Employee
-from .serializers import CompanySerializer, ServiceSerializer, EmployeeSerializer
-from rest_framework import viewsets
+from .models import Company, Service, Employee, Client, Appointment, WorkSchedule
+from .serializers import CompanySerializer, ServiceSerializer, EmployeeSerializer, ClientSerializer, \
+    AppointmentSerializer, WorkScheduleSerializer
+from rest_framework import viewsets, permissions
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from .models import ServiceCategory
@@ -208,3 +209,147 @@ class EmployeeViewSet(viewsets.ModelViewSet):
 
         return super().destroy(request, *args, **kwargs)
 
+
+class ClientViewSet(viewsets.ModelViewSet):
+    serializer_class = ClientSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """
+        Returnează doar clienții asociați utilizatorului autentificat.
+        """
+        return Client.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        """
+        Creează un nou client, setând automat utilizatorul curent ca proprietar.
+        """
+        # Verificăm dacă există deja un client cu același nume și email pentru utilizator
+        name = serializer.validated_data.get('name')
+        email = serializer.validated_data.get('email')
+        if Client.objects.filter(user=self.request.user, name=name, email=email).exists():
+            raise ValidationError("You already have a client with this name and email.")
+
+        # Salvăm clientul asociindu-l cu utilizatorul curent
+        serializer.save(user=self.request.user)
+
+    def perform_update(self, serializer):
+        """
+        Permite doar utilizatorului autentic să își actualizeze propriul client.
+        """
+        instance = self.get_object()
+
+        # Verificăm dacă utilizatorul este proprietarul clientului
+        if instance.user != self.request.user:
+            raise PermissionDenied("You do not have permission to update this client.")
+
+        # Verificăm dacă există un alt client cu același nume și email pentru utilizator
+        new_name = serializer.validated_data.get('name', instance.name)
+        new_email = serializer.validated_data.get('email', instance.email)
+        if Client.objects.filter(user=self.request.user, name=new_name, email=new_email).exclude(id=instance.id).exists():
+            raise ValidationError("You already have a client with this name and email.")
+
+        # Salvăm actualizările
+        serializer.save()
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Permite doar utilizatorului autentic să șteargă propriul client.
+        """
+        instance = self.get_object()
+
+        # Verificăm dacă utilizatorul este proprietarul clientului
+        if instance.user != self.request.user:
+            raise PermissionDenied("You do not have permission to delete this client.")
+
+        return super().destroy(request, *args, **kwargs)
+
+
+class AppointmentViewSet(viewsets.ModelViewSet):
+    serializer_class = AppointmentSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """
+        Return only appointments belonging to the authenticated user.
+        """
+        return Appointment.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        print("Data received:", serializer.validated_data)  # Log pentru verificare
+        """
+        Create a new appointment for the authenticated user, ensuring uniqueness constraints are respected.
+        """
+        client = serializer.validated_data.get('client')
+        service = serializer.validated_data.get('service')
+        employee = serializer.validated_data.get('employee')
+        date = serializer.validated_data.get('date')
+
+        # Check for conflicting appointments
+        if Appointment.objects.filter(
+            client=client,
+            user=self.request.user,
+            service=service,
+            employee=employee,
+            date=date
+        ).exists():
+            raise ValidationError("An appointment with this service, employee, and date already exists.")
+
+        # Save the new appointment
+        serializer.save(user=self.request.user)
+
+    def perform_update(self, serializer):
+        """
+        Update an appointment for the authenticated user, respecting ownership and uniqueness constraints.
+        """
+        instance = self.get_object()
+
+        # Ensure the appointment belongs to the authenticated user
+        if instance.user != self.request.user:
+            raise PermissionDenied("You do not have permission to update this appointment.")
+
+        # Check for conflicting appointments
+        new_service = serializer.validated_data.get('service', instance.service)
+        new_employee = serializer.validated_data.get('employee', instance.employee)
+        new_date = serializer.validated_data.get('date', instance.date)
+
+        if Appointment.objects.filter(
+            user=self.request.user,
+            service=new_service,
+            employee=new_employee,
+            date=new_date
+        ).exclude(pk=instance.pk).exists():
+            raise ValidationError("An appointment with this service, employee, and date already exists.")
+
+        # Save the updated appointment
+        serializer.save()
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Allow only the authenticated user to delete their appointments.
+        """
+        instance = self.get_object()
+
+        # Ensure the appointment belongs to the authenticated user
+        if instance.user != self.request.user:
+            raise PermissionDenied("You do not have permission to delete this appointment.")
+
+        return super().destroy(request, *args, **kwargs)
+
+
+class WorkScheduleViewSet(viewsets.ModelViewSet):
+    serializer_class = WorkScheduleSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        """
+        Returnăm programele de lucru asociate utilizatorului autentificat.
+        """
+        user = self.request.user
+        return WorkSchedule.objects.filter(user=user).select_related('employee')
+
+    def perform_create(self, serializer):
+        """
+        Setăm utilizatorul autentificat ca proprietar al programului de lucru.
+        """
+        serializer.save(user=self.request.user)
